@@ -1,0 +1,7 @@
+*.odt
+*.pyc
+__pycache__/
+.DS_Store
+venv/
+stabadenvP8/
+data/app_datas_full_imputed_scaled.csv

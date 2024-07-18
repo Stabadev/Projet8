@@ -1,0 +1,35 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Deploy application
+      run: |
+        ssh -o StrictHostKeyChecking=no arogues@137.74.198.208 << 'EOF'
+          # Aller dans le dossier
+          cd /var/www/my_webapp__4/www
+          
+          # Déplacer l'ancien dossier Projet8 dans un dossier de sauvegarde avec un timestamp
+          TIMESTAMP=$(date +'%d%m%y_%H%M%S')
+          BACKUP_DIR="Backup_Projet8_${TIMESTAMP}"
+          mv Projet8 $BACKUP_DIR
+          
+          # Cloner le nouveau dépôt Projet8
+          git clone --branch master https://github.com/Stabadev/Projet8.git
+          
+        EOF
