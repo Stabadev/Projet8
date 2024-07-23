@@ -53,8 +53,34 @@ model = joblib.load(model_path)
 # Configuration de la page
 st.set_page_config(page_title="Dashboard Client", layout="wide")
 
+# Option pour changer la taille du texte
+text_size = st.selectbox("Sélectionnez la taille du texte", ["Moyen", "Grand", "Petit"])
+
+# Définir la taille du texte en fonction de l'option sélectionnée
+if text_size == "Petit":
+    text_size_css = "12px"
+elif text_size == "Moyen":
+    text_size_css = "16px"
+else:
+    text_size_css = "20px"
+
+# Appliquer le CSS pour changer la taille du texte
+st.markdown(f"""
+    <style>
+    * {{
+        font-size: {text_size_css} !important;
+    }}
+    h1, h2, h3, h4, h5, h6 {{
+        font-size: {text_size_css} !important;
+    }}
+    .markdown-text-container {{
+        font-size: {text_size_css} !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
 # Titre principal
-st.title("Dashboard Client")
+st.title("Calculateur de risque de remboursement")
 
 # Champ de saisie pour le numéro de client
 client_id_input = st.text_input("Entrez le numéro de client", "")
@@ -104,11 +130,11 @@ if client_id_input:
 
             if available_features:
                 client_info = client_data_raw[available_features].iloc[0]
-                gender = " - est un homme" if client_info['CODE_GENDER_M'] == 1 and client_info['CODE_GENDER_F'] == 0 else " - est une femme"
-                own_car = " - possède une voiture" if client_info['FLAG_OWN_CAR'] == 1 else " - ne possède pas de voiture"
-                own_realty = " - est propriétaire" if client_info['FLAG_OWN_REALTY'] == 1 else " - n'est pas propriétaire"
-                children = " - n'a pas d'enfants" if client_info['CNT_CHILDREN'] == 0 else f" - a {client_info['CNT_CHILDREN']} enfant(s) à sa charge"
-                
+                gender = " - 👨 est un homme" if client_info['CODE_GENDER_M'] == 1 and client_info['CODE_GENDER_F'] == 0 else " - 👩 est une femme"
+                own_car = " - 🚗 possède une voiture" if client_info['FLAG_OWN_CAR'] == 1 else " - 🚶‍♂️ ne possède pas de voiture"
+                own_realty = " - 🏠 est propriétaire" if client_info['FLAG_OWN_REALTY'] == 1 else " - ❌ n'est pas propriétaire"
+                children = " - ❌ n'a pas d'enfants" if client_info['CNT_CHILDREN'] == 0 else f" - {' '.join(['👶' for _ in range(client_info['CNT_CHILDREN'])])} a {client_info['CNT_CHILDREN']} enfant(s) à sa charge"
+            
                 st.write(gender)
                 st.write(own_car)
                 st.write(own_realty)
@@ -233,8 +259,129 @@ if client_id_input:
                 """)
                 st.dataframe(global_importances_df)
 
-        
+        if st.checkbox("Afficher les valeurs de la base de donnée"):
+            # Liste des caractéristiques disponibles
+            features = [
+                'EXT_SOURCE_3',
+                'EXT_SOURCE_2',
+                'DAYS_REGISTRATION',
+                'DAYS_EMPLOYED',
+                'EXT_SOURCE_1'
+            ]
 
+            # Sélectionner la caractéristique à afficher
+            selected_feature = st.selectbox("Sélectionnez la caractéristique à afficher", features)
+
+            # Sélecteur pour afficher les résultats de tout le monde ou comparer homme/femme
+            compare_option = st.radio("Sélectionnez l'option d'affichage", ("Tout le monde", "Comparer homme/femme"))
+
+
+            def create_histogram(data, feature, title):
+                selection = alt.selection_interval(bind='scales')
+                histogram = alt.Chart(data).mark_bar().encode(
+                    alt.X(f"{feature}:Q", bin=alt.Bin(maxbins=50), title=feature),
+                    alt.Y('count()', title='Nombre de clients'),
+                    tooltip=[feature, 'count()']
+                ).properties(
+                    title=title,
+                    width=300,
+                    height=400
+                ).add_selection(
+                    selection
+                )
+                return histogram
+
+            # Vérifier que la caractéristique sélectionnée existe dans le dataframe
+            if selected_feature in client_data_raw_df.columns:
+                if client_id_input:
+                    try:
+                        client_id = int(client_id_input)
+                        client_data = client_data_raw_df[client_data_raw_df['SK_ID_CURR'] == client_id]
+
+                        if not client_data.empty:
+                            client_value = client_data[selected_feature].values[0]
+
+                            if compare_option == "Tout le monde":
+                                # Créer l'histogramme pour tous les clients
+                                histogram = create_histogram(client_data_raw_df, selected_feature, f'Distribution de {selected_feature}')
+                                line = alt.Chart(pd.DataFrame({'value': [client_value]})).mark_rule(
+                                    color='black', 
+                                    size=2, 
+                                    strokeDash=[5,5]
+                                ).encode(
+                                    x='value:Q'
+                                )
+                                text = alt.Chart(pd.DataFrame({'value': [client_value]})).mark_text(
+                                    align='left',
+                                    baseline='middle',
+                                    dx=5,
+                                    dy=-10,
+                                    fontSize=12,
+                                    text='Client',
+                                    color='black'
+                                ).encode(
+                                    x='value:Q'
+                                )
+                                chart = histogram + line + text
+                                st.altair_chart(chart)
+
+                            elif compare_option == "Comparer homme/femme":
+                                # Créer les histogrammes pour les hommes et les femmes
+                                male_data = client_data_raw_df[client_data_raw_df['CODE_GENDER_M'] == 1]
+                                female_data = client_data_raw_df[client_data_raw_df['CODE_GENDER_F'] == 1]
+
+                                histogram_male = create_histogram(male_data, selected_feature, 'Hommes')
+                                histogram_female = create_histogram(female_data, selected_feature, 'Femmes')
+
+                                line_male = alt.Chart(pd.DataFrame({'value': [client_value]})).mark_rule(
+                                    color='black', 
+                                    size=2, 
+                                    strokeDash=[5,5]
+                                ).encode(
+                                    x='value:Q'
+                                )
+                                text_male = alt.Chart(pd.DataFrame({'value': [client_value]})).mark_text(
+                                    align='left',
+                                    baseline='middle',
+                                    dx=5,
+                                    dy=-10,
+                                    fontSize=12,
+                                    text='Client',
+                                    color='black'
+                                ).encode(
+                                    x='value:Q'
+                                )
+                                chart_male = histogram_male + line_male + text_male
+
+                                line_female = alt.Chart(pd.DataFrame({'value': [client_value]})).mark_rule(
+                                    color='black', 
+                                    size=2, 
+                                    strokeDash=[5,5]
+                                ).encode(
+                                    x='value:Q'
+                                )
+                                text_female = alt.Chart(pd.DataFrame({'value': [client_value]})).mark_text(
+                                    align='left',
+                                    baseline='middle',
+                                    dx=5,
+                                    dy=-10,
+                                    fontSize=12,
+                                    text='Client',
+                                    color='black'
+                                ).encode(
+                                    x='value:Q'
+                                )
+                                chart_female = histogram_female + line_female + text_female
+
+                                col1, col2 = st.columns(2)
+                                col1.altair_chart(chart_male)
+                                col2.altair_chart(chart_female)
+                        else:
+                            st.error(f"Le client ID {client_id_input} n'a pas été trouvé.")
+                    except ValueError:
+                        st.error("Veuillez entrer un numéro de client valide.")
+            else:
+                st.error(f"La colonne '{selected_feature}' n'existe pas dans le dataframe.")
 
         
         
